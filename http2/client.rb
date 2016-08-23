@@ -15,7 +15,7 @@ tcp = TCPSocket.new(uri.host, uri.port)
 sock = nil
 sock = tcp
 
-#------------------------------SSL----------------------------------
+#------------------------------SSL-TLS----------------------------------
 # if uri.scheme == 'https'
 #   ctx = OpenSSL::SSL::SSLContext.new
 #   ctx.verify_mode = OpenSSL::SSL::VERIFY_NONE
@@ -111,7 +111,7 @@ loop do
     exit
   end
 
-  #----------------
+  #--------GET--------
   if choice=="g"
 
     head = {
@@ -129,7 +129,8 @@ loop do
 
   end # GET end
 
-  #----------------
+
+  #-------POST---------
   if choice=="p"
 
     head = {
@@ -145,7 +146,8 @@ loop do
     stream.data(options[:payload])
   end # POST end
 
-  #----------------
+
+  #-------SUBSCRIBE---------
   if choice=="s"
 
     head = {
@@ -160,6 +162,8 @@ loop do
     stream.headers(head, end_stream: true)
   end # SUBSCRIBE end
 
+
+  #---------------------SOCKET READ--------------------------
   while !sock.closed? && !sock.eof?
     data = sock.read_nonblock(2048) # was 1024 before
     puts "Received bytes: #{data.unpack("H*").first}"
@@ -168,6 +172,8 @@ loop do
       puts "conn-data-start"
       conn << data
       puts "conn-data-end"
+
+      # TODO: Response getting longer with every request: non-consuming data read?
       break
 
     rescue => e
