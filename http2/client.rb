@@ -40,6 +40,12 @@ end
 #----------------------------------------------------------------
 
 conn = HTTP2::Client.new
+stream = conn.new_stream
+log = Logger.new(stream.id)
+
+loop do
+  puts "MAIN Loop started."
+
 conn.on(:frame) do |bytes|
   # puts "Sending bytes: #{bytes.unpack("H*").first}"
   sock.print bytes
@@ -52,8 +58,7 @@ conn.on(:frame_received) do |frame|
   puts "[IN] Received frame: #{frame.inspect}"
 end
 
-stream = conn.new_stream
-log = Logger.new(stream.id)
+
 
 conn.on(:promise) do |promise|
   promise.on(:headers) do |h|
@@ -92,7 +97,6 @@ end
 
 #----------------------------------------------------------------
 
-loop do
 
   puts "g - GET"
   puts "p - POST"
@@ -175,8 +179,3 @@ loop do
 
 
 end  # menu loop end
-
-
-
-
-#----------------------------------------------------------------
