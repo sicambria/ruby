@@ -17,7 +17,7 @@ end.parse!
 #----------------------------------------------------------------
 puts "Starting server on port #{options[:port]}"
 server = TCPServer.new(options[:port])
-#----------------------------------------------------------------
+#----------------------------SSL-TLS------------------------------------
 # if options[:secure]
 #   ctx = OpenSSL::SSL::SSLContext.new
 #   ctx.cert = OpenSSL::X509::Certificate.new(File.open('keys/server.crt'))
@@ -85,9 +85,13 @@ loop do
       buffer << d
     end
 
+
+#------------------------COMPILE RESPONSE-----------------------------
     response = nil
     str_method = req[':method']
     str_path = req[':path']
+# TODO: extracting headers is not successful
+
     puts "[SERVER DEBUG] Received METHOD AND PATH:  #{str_method} at #{str_path}"
 
     if req[':method'] == 'GET' && req[':path'] == '/.well-known/sila'
@@ -114,7 +118,7 @@ loop do
     end
 
 
-    #----------------------------------------------------------------
+    #------------------------SEND RESPONSE-----------------------------
     stream.headers({
       ':status' => '200',
       'content-length' => response.bytesize.to_s,
@@ -123,15 +127,16 @@ loop do
       }, end_stream: false)
 
       # split response into multiple DATA frames
-
       # stream.data(response.slice!(0, 5), end_stream: false)
+
       puts "stream DATA send START"
       # stream.data(response, end_stream: false)
       stream.data(response)
       puts "stream DATA send END"
-      #stream.data(response)
     end
 
+
+    #---------------------SOCKET READ--------------------------
     while !sock.closed? && !(sock.eof? rescue true) # rubocop:disable Style/RescueModifier
       data = sock.readpartial(1024)
       puts "Received bytes: #{data.unpack("H*").first}"
@@ -147,9 +152,8 @@ loop do
         sock.close
 
       end # End of Begin
-      puts "end1"
+      puts "end of reading socket"
     end # End of While
-    puts "end2"
 
     puts "stream end"
     #----------------------------------------------------------------
