@@ -18,26 +18,26 @@ end.parse!
 puts "Starting server on port #{options[:port]}"
 server = TCPServer.new(options[:port])
 #----------------------------------------------------------------
-if options[:secure]
-  ctx = OpenSSL::SSL::SSLContext.new
-  ctx.cert = OpenSSL::X509::Certificate.new(File.open('keys/server.crt'))
-  ctx.key = OpenSSL::PKey::RSA.new(File.open('keys/server.key'))
-
-  ctx.ssl_version = :TLSv1_2
-  ctx.options = OpenSSL::SSL::SSLContext::DEFAULT_PARAMS[:options]
-  ctx.ciphers = OpenSSL::SSL::SSLContext::DEFAULT_PARAMS[:ciphers]
-
-  ctx.alpn_select_cb = lambda do |protocols|
-    raise "Protocol #{DRAFT} is required" if protocols.index(DRAFT).nil?
-    DRAFT
-  end
-
-  ctx.tmp_ecdh_callback = lambda do |_args|
-    OpenSSL::PKey::EC.new 'prime256v1'
-  end
-
-  server = OpenSSL::SSL::SSLServer.new(server, ctx)
-end
+# if options[:secure]
+#   ctx = OpenSSL::SSL::SSLContext.new
+#   ctx.cert = OpenSSL::X509::Certificate.new(File.open('keys/server.crt'))
+#   ctx.key = OpenSSL::PKey::RSA.new(File.open('keys/server.key'))
+#
+#   ctx.ssl_version = :TLSv1_2
+#   ctx.options = OpenSSL::SSL::SSLContext::DEFAULT_PARAMS[:options]
+#   ctx.ciphers = OpenSSL::SSL::SSLContext::DEFAULT_PARAMS[:ciphers]
+#
+#   ctx.alpn_select_cb = lambda do |protocols|
+#     raise "Protocol #{DRAFT} is required" if protocols.index(DRAFT).nil?
+#     DRAFT
+#   end
+#
+#   ctx.tmp_ecdh_callback = lambda do |_args|
+#     OpenSSL::PKey::EC.new 'prime256v1'
+#   end
+#
+#   server = OpenSSL::SSL::SSLServer.new(server, ctx)
+# end
 #----------------------------------------------------------------
 #----------------------------------------------------------------
 
@@ -86,24 +86,28 @@ loop do
     end
 
     response = nil
-    if req[':method'] == 'GET' && req[':url'] == '.well-known/sila'
+    str_method = req[':method']
+    str_path = req[':path']
+    puts "[SERVER DEBUG] Received METHOD AND PATH:  #{str_method} at #{str_path}"
+
+    if req[':method'] == 'GET' && req[':path'] == '/.well-known/sila'
       log.info 'Received GET to COMMAND'
-      response = 'COMMAND'
+      response = 'GET - SiLA2 device'
     else
-      if req[':method'] == 'GET' && req[':url'] == '/sila2/org.sila-standard.release/common/needs_initalization/v1/'
+      if req[':method'] == 'GET' && req[':path'] == '/sila2/org.sila-standard.release/common/needs_initalization/v1/'
         log.info 'Received GET to COMMAND'
-        response = 'COMMAND'
+        response = 'GET - needs_initalization RAML'
       else
-        if req[':method'] == 'GET' && req[':url'] == '/sila2/org.sila-standard.release/common/needs_initalization/v1/command/reset'
+        if req[':method'] == 'GET' && req[':path'] == '/sila2/org.sila-standard.release/common/needs_initalization/v1/command/reset'
           log.info 'Received GET to COMMAND'
-          response = 'COMMAND'
+          response = 'GET - RESET command'
         else
-          if req[':method'] == 'POST' && req[':url'] == 'POST'
+          if req[':method'] == 'POST' && req[':path'] == '/.well-known/sila'
             log.info "Received POST request, payload: #{buffer}"
-            response = "Hello HTTP 2.0! POST payload: #{buffer}"
+            response = "[SERVER DEBUG] Hello HTTP 2.0! POST payload: #{buffer}"
           else
-            log.info 'Received INVALID COMMAND'
-            response = 'INVALID COMMAND'
+            log.info "Received PATH or COMMAND:  #{str_method} at #{str_path}"
+            response = "[SERVER DEBUG] PATH or COMMAND: #{str_method} at #{str_path}"
           end
         end
       end
@@ -114,15 +118,17 @@ loop do
     stream.headers({
       ':status' => '200',
       'content-length' => response.bytesize.to_s,
+      #    'content-length' => response.size.to_s,   #bytesize.to_s,
       'content-type' => 'text/plain',
       }, end_stream: false)
 
       # split response into multiple DATA frames
 
-      #stream.data(response.slice!(0, 5), end_stream: false)
-      puts "stream send START"
-      stream.data(response, end_stream: false)
-      puts "stream send END"
+      # stream.data(response.slice!(0, 5), end_stream: false)
+      puts "stream DATA send START"
+      # stream.data(response, end_stream: false)
+      stream.data(response)
+      puts "stream DATA send END"
       #stream.data(response)
     end
 
@@ -138,7 +144,7 @@ loop do
         puts "rescue RUNS"
         puts "#{e.class} exception: #{e.message} - closing socket."
         e.backtrace.each { |l| puts "\t" + l }
-        #sock.close
+        sock.close
 
       end # End of Begin
       puts "end1"
@@ -148,5 +154,4 @@ loop do
     puts "stream end"
     #----------------------------------------------------------------
 
-  # end # of inner loop
 end # End of main loop
