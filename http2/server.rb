@@ -42,12 +42,16 @@ end
 #----------------------------------------------------------------
 
 loop do
-  puts "Waiting..."
+  puts "Waiting for new connection..."
   ### ------------------NEW CONNECTION ------------------------
   sock = server.accept
   puts 'New TCP connection!'
 
   conn = HTTP2::Server.new
+
+  #loop do
+  #  puts "second loop started."
+
   conn.on(:frame) do |bytes|
     puts "Writing bytes: #{bytes.unpack("H*").first}"
     sock.write bytes
@@ -75,8 +79,6 @@ loop do
     #  stream.on(:half_close) do
     #    log.info 'client closed its end of the stream'
     #  end
-
-
 
     stream.on(:data) do |d|
       log.info "payload chunk: <<#{d}>>"
@@ -138,20 +140,13 @@ loop do
         e.backtrace.each { |l| puts "\t" + l }
         #sock.close
 
-      end
+      end # End of Begin
       puts "end1"
-    end
+    end # End of While
     puts "end2"
 
+    puts "stream end"
+    #----------------------------------------------------------------
 
-  puts "stream end"
-
-
-
-  #----------------------------------------------------------------
-
-
-  #----------------------------------------------------------------
-
-
-end
+  # end # of inner loop
+end # End of main loop
