@@ -43,16 +43,18 @@ sock = tcp
 
 conn = HTTP2::Client.new
 
+#----------------------------CONN. EVENTS----------------------------
 
-#----------------------------EVENTS----------------------------
 conn.on(:frame) do |bytes|
   puts "Sending bytes: #{bytes.unpack("H*").first}"
   sock.print bytes
   sock.flush
 end
+
 conn.on(:frame_sent) do |frame|
   puts "[OUT] Sent frame: #{frame.inspect}"
 end
+
 conn.on(:frame_received) do |frame|
   puts "[IN] Received frame: #{frame.inspect}"
 end
@@ -71,12 +73,12 @@ conn.on(:altsvc) do |f|
   log.info "[CL] received ALTSVC #{f}"
 end
 
-
+# ------------ LOOP ----------------
 loop do
   stream = conn.new_stream
   log = Logger.new(stream.id)
 
-
+  #----------------------------STREAM EVENTS----------------------------
 
   stream.on(:close) do
     log.info '[CL] stream closed'
@@ -119,16 +121,16 @@ loop do
   if choice=="g"
 
     head = {
-      ':scheme' => uri.scheme,
-      ':method' => 'GET',
-      # ':method' => (options[:payload].nil? ? 'GET' : 'POST'),
-      ':authority' => [uri.host, uri.port].join(':'),
-      ':path' => '/.well-known/sila',
-      'accept' => '*/*',
+        ':scheme' => uri.scheme,
+        ':method' => 'GET',
+        # ':method' => (options[:payload].nil? ? 'GET' : 'POST'),
+        ':authority' => [uri.host, uri.port].join(':'),
+        ':path' => '/.well-known/sila',
+        'accept' => '*/*',
     }
 
     puts 'GET status'
-    stream.headers(head, end_stream: false)
+    stream.headers(head, end_stream: true)
     puts 'GET status SENT'
 
   end # GET end
@@ -138,15 +140,15 @@ loop do
   if choice=="p"
 
     head = {
-      ':scheme' => uri.scheme,
-      ':method' => 'POST',
-      ':authority' => [uri.host, uri.port].join(':'),
-      ':path' => '/.well-known/sila',
-      'accept' => '*/*',
+        ':scheme' => uri.scheme,
+        ':method' => 'POST',
+        ':authority' => [uri.host, uri.port].join(':'),
+        ':path' => '/.well-known/sila',
+        'accept' => '*/*',
     }
 
     puts 'Sending HTTP 2.0 POST request'
-    stream.headers(head, end_stream: false)
+    stream.headers(head, end_stream: true)
     stream.data(options[:payload])
   end # POST end
 
@@ -155,11 +157,11 @@ loop do
   if choice=="s"
 
     head = {
-      ':scheme' => uri.scheme,
-      ':method' => 'GET',
-      ':authority' => [uri.host, uri.port].join(':'),
-      ':path' => '/.well-known/sila/clock',
-      'accept' => '*/*',
+        ':scheme' => uri.scheme,
+        ':method' => 'GET',
+        ':authority' => [uri.host, uri.port].join(':'),
+        ':path' => '/.well-known/sila/clock',
+        'accept' => '*/*',
     }
 
     puts 'SUBSCRIBE'
@@ -167,22 +169,23 @@ loop do
   end # SUBSCRIBE end
 
 
+  sleep 3
+
   #---------------------SOCKET READ--------------------------
   while !sock.closed? && !sock.eof?
-    data = sock.read_nonblock(2048) # was 1024 before
+    data = sock.read_nonblock(1024) # was 1024 before
     puts "Received bytes: #{data.unpack("H*").first}"
 
     begin
       puts "conn-data-start"
       conn << data
       puts "conn-data-end"
-      break
 
     rescue => e
       puts "#{e.class} exception: #{e.message} - closing socket."
       e.backtrace.each { |l| puts "\t" + l }
       sock.close
-      break
+      #break
     end # conn-data-start - begin end
   end # socket while end
 end # MAIN MENU loop end
