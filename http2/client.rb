@@ -43,36 +43,40 @@ sock = tcp
 
 conn = HTTP2::Client.new
 
+
+#----------------------------EVENTS----------------------------
+conn.on(:frame) do |bytes|
+  puts "Sending bytes: #{bytes.unpack("H*").first}"
+  sock.print bytes
+  sock.flush
+end
+conn.on(:frame_sent) do |frame|
+  puts "[OUT] Sent frame: #{frame.inspect}"
+end
+conn.on(:frame_received) do |frame|
+  puts "[IN] Received frame: #{frame.inspect}"
+end
+
+conn.on(:promise) do |promise|
+  promise.on(:headers) do |h|
+    log.info "[CL] promise headers: #{h}"
+  end
+
+  promise.on(:data) do |d|
+    log.info "[CL] promise data chunk: <<#{d.size}>>"
+  end
+end
+
+conn.on(:altsvc) do |f|
+  log.info "[CL] received ALTSVC #{f}"
+end
+
+
 loop do
   stream = conn.new_stream
   log = Logger.new(stream.id)
 
-  #----------------------------EVENTS----------------------------
-  conn.on(:frame) do |bytes|
-    puts "Sending bytes: #{bytes.unpack("H*").first}"
-    sock.print bytes
-    sock.flush
-  end
-  conn.on(:frame_sent) do |frame|
-    puts "[OUT] Sent frame: #{frame.inspect}"
-  end
-  conn.on(:frame_received) do |frame|
-    puts "[IN] Received frame: #{frame.inspect}"
-  end
 
-  conn.on(:promise) do |promise|
-    promise.on(:headers) do |h|
-      log.info "[CL] promise headers: #{h}"
-    end
-
-    promise.on(:data) do |d|
-      log.info "[CL] promise data chunk: <<#{d.size}>>"
-    end
-  end
-
-  conn.on(:altsvc) do |f|
-    log.info "[CL] received ALTSVC #{f}"
-  end
 
   stream.on(:close) do
     log.info '[CL] stream closed'
@@ -172,8 +176,6 @@ loop do
       puts "conn-data-start"
       conn << data
       puts "conn-data-end"
-
-      # TODO: Response getting longer with every request: non-consuming data read?
       break
 
     rescue => e
