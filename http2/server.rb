@@ -1,7 +1,7 @@
 require_relative 'helper'
 
 #--------------------OPTIONS----------------------------
-options = { port: 8080 }
+options = {port: 8080}
 OptionParser.new do |opts|
   opts.banner = 'Usage: server.rb [options]'
 
@@ -41,121 +41,164 @@ server = TCPServer.new(options[:port])
 #----------------------------------------------------------------
 #----------------------------------------------------------------
 
+# GLOBAL VAR
+
+log = Logger.new(1)
+req, buffer = {}, ''
+
+puts "Waiting for new connection..."
+### ------------------NEW CONNECTION ------------------------
+sock = server.accept
+puts 'New TCP connection!'
+conn = HTTP2::Server.new
+
+
 loop do
-  puts "Waiting for new connection..."
-  ### ------------------NEW CONNECTION ------------------------
-  sock = server.accept
-  puts 'New TCP connection!'
 
-  conn = HTTP2::Server.new
-
-  #loop do
-  #  puts "second loop started."
 
   conn.on(:frame) do |bytes|
     puts "Writing bytes: #{bytes.unpack("H*").first}"
     sock.write bytes
+    sock.flush
   end
+
   conn.on(:frame_sent) do |frame|
     puts "Sent frame: #{frame.inspect}"
   end
+
   conn.on(:frame_received) do |frame|
     puts "Received frame: #{frame.inspect}"
   end
 
-  ### ------------------NEW STREAM ------------------------
+
+### ------------------NEW STREAM ------------------------
   conn.on(:stream) do |stream|
+
     log = Logger.new(stream.id)
-    req, buffer = {}, ''
 
     stream.on(:active) { log.info 'client opened new stream' }
-    stream.on(:close)  { log.info 'stream closed' }
+    stream.on(:close) { log.info 'stream closed' }
 
     stream.on(:headers) do |h|
       req = Hash[*h.flatten]
       log.info "request headers: #{h}"
+
+
     end
 
-    #  stream.on(:half_close) do
-    #    log.info 'client closed its end of the stream'
-    #  end
+    stream.on(:half_close) do
+      log.info 'client closed its end of the stream'
+
+      response = nil
+      str_method = req[':method']
+      str_path = req[':path']
+
+      puts "[SERVER DEBUG] Received METHOD AND PATH:  #{str_method} at #{str_path}"
+      response_ready = false
+
+
+      if req[':method'] == 'GET' && req[':path'] == '/.well-known/sila'
+        log.info 'Received GET to COMMAND'
+        response = 'GET - SiLA2 device'
+        response_ready = true
+      else
+        if req[':method'] == 'GET' && req[':path'] == '/sila2/org.sila-standard.release/common/needs_initalization/v1/'
+          log.info 'Received GET to COMMAND'
+          response = 'GET - needs_initalization RAML'
+          response_ready = true
+        else
+          if req[':method'] == 'GET' && req[':path'] == '/sila2/org.sila-standard.release/common/needs_initalization/v1/command/reset'
+            log.info 'Received GET to COMMAND'
+            response = 'GET - RESET command'
+            response_ready = true
+          else
+            if req[':method'] == 'POST' && req[':path'] == '/.well-known/sila'
+              log.info "Received POST request, payload: #{buffer}"
+              response = "[SERVER DEBUG] Hello HTTP 2.0! POST payload: #{buffer}"
+              response_ready = true
+            else
+              log.info "Received PATH or COMMAND:  #{str_method} at #{str_path}"
+              response = "[SERVER DEBUG] PATH or COMMAND: #{str_method} at #{str_path}"
+            end
+          end
+        end
+      end
+
+
+      if (response_ready)
+
+        # split response into multiple DATA frames
+        # stream.data(response.slice!(0, 5), end_stream: false)
+
+        # ONLY FOR POST
+        if req[':method'] == 'POST'
+
+          stream.headers({
+                             ':status' => '200',
+                             'content-length' => response.bytesize.to_s, # should be less than or equal to 4096 bytes
+                             'content-type' => 'text/plain',
+                         }, end_stream: false)
+
+          puts "stream DATA send START"
+          # stream.data(response, end_stream: false)
+          stream.data(response)
+          puts "stream DATA send END"
+
+        else
+          stream.headers({
+                             ':status' => '200',
+                             'content-length' => response.bytesize.to_s, # should be less than or equal to 4096 bytes
+                             'content-type' => 'text/plain',
+                         }, end_stream: true)
+        end
+
+
+      end
+
+
+    end
 
     stream.on(:data) do |d|
       log.info "payload chunk: <<#{d}>>"
       buffer << d
     end
+  end
 
 
 #------------------------COMPILE RESPONSE-----------------------------
-    response = nil
-    str_method = req[':method']
-    str_path = req[':path']
-# TODO: extracting headers is not successful
-
-    puts "[SERVER DEBUG] Received METHOD AND PATH:  #{str_method} at #{str_path}"
-
-    if req[':method'] == 'GET' && req[':path'] == '/.well-known/sila'
-      log.info 'Received GET to COMMAND'
-      response = 'GET - SiLA2 device'
-    else
-      if req[':method'] == 'GET' && req[':path'] == '/sila2/org.sila-standard.release/common/needs_initalization/v1/'
-        log.info 'Received GET to COMMAND'
-        response = 'GET - needs_initalization RAML'
-      else
-        if req[':method'] == 'GET' && req[':path'] == '/sila2/org.sila-standard.release/common/needs_initalization/v1/command/reset'
-          log.info 'Received GET to COMMAND'
-          response = 'GET - RESET command'
-        else
-          if req[':method'] == 'POST' && req[':path'] == '/.well-known/sila'
-            log.info "Received POST request, payload: #{buffer}"
-            response = "[SERVER DEBUG] Hello HTTP 2.0! POST payload: #{buffer}"
-          else
-            log.info "Received PATH or COMMAND:  #{str_method} at #{str_path}"
-            response = "[SERVER DEBUG] PATH or COMMAND: #{str_method} at #{str_path}"
-          end
-        end
-      end
-    end
 
 
-    #------------------------SEND RESPONSE-----------------------------
-    stream.headers({
-      ':status' => '200',
-      'content-length' => response.bytesize.to_s,
-      #    'content-length' => response.size.to_s,   #bytesize.to_s,
-      'content-type' => 'text/plain',
-      }, end_stream: false)
+#if ready
+#------------------------SEND RESPONSE-----------------------------
 
-      # split response into multiple DATA frames
-      # stream.data(response.slice!(0, 5), end_stream: false)
-
-      puts "stream DATA send START"
-      # stream.data(response, end_stream: false)
-      stream.data(response)
-      puts "stream DATA send END"
-    end
+# end
 
 
-    #---------------------SOCKET READ--------------------------
-    while !sock.closed? && !(sock.eof? rescue true) # rubocop:disable Style/RescueModifier
-      data = sock.readpartial(1024)
-      puts "Received bytes: #{data.unpack("H*").first}"
+  sleep 2
 
-      begin
-        conn << data
-        puts "conn-data end"
 
-      rescue => e
-        puts "rescue RUNS"
-        puts "#{e.class} exception: #{e.message} - closing socket."
-        e.backtrace.each { |l| puts "\t" + l }
-        sock.close
+#---------------------SOCKET READ--------------------------
+  while !sock.closed? && !(sock.eof? rescue true) # rubocop:disable Style/RescueModifier
+    data = sock.readpartial(1024)
+    puts "Received bytes: #{data.unpack("H*").first}"
 
-      end # End of Begin
-      puts "end of reading socket"
-    end # End of While
+    begin
+      conn << data
+      puts "conn-data end"
+        #break
 
-    puts "stream end"
-    #----------------------------------------------------------------
+    rescue => e
+      puts "rescue RUNS"
+      puts "#{e.class} exception: #{e.message} - closing socket."
+      e.backtrace.each { |l| puts "\t" + l }
+      sock.close
+
+    end # End of Begin
+    puts "end of reading socket"
+  end # End of While
+
+#puts "stream end"
+#----------------------------------------------------------------
+
 
 end # End of main loop
